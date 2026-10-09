@@ -72,7 +72,30 @@ bun run notion config
 
 Responses listen on `127.0.0.1:17842/v1`. Two independent private bearer values protect Responses and callback endpoints. `notion run` passes the Responses key and a fresh, stable per-Codex-process session header only via the child environment. Do not put keys on command lines or expose the Responses endpoint to the public tunnel.
 
-`setup` supports `--port`, `--callback-port`, `--model`, `--timeout-ms`, and `--replace` after cleanup. `serve`/`run` support `--cloudflared PATH`; `run` supports `--codex-bin PATH`. Codex arguments belong after `--`.
+`setup` supports `--port`, `--callback-port`, `--timeout-ms`, and `--replace` after cleanup. `--model SLUG` and `--reasoning-effort LEVEL` apply to `setup`, `serve` and `run`. `serve`/`run` support `--cloudflared PATH`; `run` supports `--codex-bin PATH`. Codex arguments belong after `--`.
+
+## Model selection
+
+The model is chosen per request by Codex. `notion models` lists the Codex slugs this profile serves, and `/model` inside the Codex TUI switches between them without restarting the runtime.
+
+```sh
+# List the slugs, their Notion model and the reasoning levels Codex may send.
+bun run notion models
+./dist/codex-notion-web models --home /path/to/profile
+
+# Change the profile default at setup time.
+bun run notion setup --cookie-file /private/path/notion-cookies.txt --workspace YOUR-WORKSPACE-UUID \
+  --model gpt-5.4 --reasoning-effort high
+
+# Override for one run only; the stored profile is not rewritten.
+bun run notion run --tunnel --model opus-4.7-high -- exec --sandbox read-only "Your task"
+```
+
+- `notion-ai` always stays the first slug and means "this profile's default model". It is what Codex starts with.
+- Every other slug maps to one selectable entry of the embedded Notion model registry, so the list follows the models your own account actually serves.
+- `--model` and `/model` accept a slug, a Notion model id (`oatmeal-cookie`) or a built-in alias (`gpt-5.4`, `sonnet-4.6`, `thinking`, ...). `NOTION_MODEL_ALIASES` adds your own JSON alias map.
+- Reasoning levels are advertised per model and restricted to the four Codex understands (`minimal`, `low`, `medium`, `high`). A level a model cannot serve is clamped to its nearest supported one; a model without a reasoning picker ignores the setting.
+- An unknown slug is refused with HTTP 400 and a pointer to `notion models`, instead of silently answering with a different model.
 
 ## Build a self-contained app executable
 

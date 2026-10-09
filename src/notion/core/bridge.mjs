@@ -55,7 +55,7 @@ export class CodexNotionBridge {
     if (results.length) throw requestError('Tool results have no matching live Codex turn; previous_response_id state expired');
     return undefined;
   }
-  async run(body, { signal, sessionId } = {}) {
+  async run(body, { signal, sessionId, model, reasoningEffort } = {}) {
     signal?.throwIfAborted(); this.broker.sweep();
     const { entries, results, tools } = extractInputs(body), seen = new Set();
     for (const result of results) {
@@ -106,7 +106,7 @@ export class CodexNotionBridge {
       turn = this.broker.start(tools); token = turn.token;
       if (initialKey && results.length === 0 && !body.previous_response_id) this.initialTurns.set(initialKey, token);
     }
-    const promise = this.runTurn(body, turn, { signal, resumeConversationId, needsStart: !turn.jobId });
+    const promise = this.runTurn(body, turn, { signal, resumeConversationId, needsStart: !turn.jobId, model, reasoningEffort });
     this.active.set(token, { key, promise });
     try {
       const response = await promise;
@@ -114,15 +114,17 @@ export class CodexNotionBridge {
       return response;
     } finally { if (this.active.get(token)?.promise === promise) this.active.delete(token); }
   }
-  async runTurn(body, turn, { signal, resumeConversationId, needsStart }) {
+  async runTurn(body, turn, { signal, resumeConversationId, needsStart, model: notionModel, reasoningEffort }) {
     const token = turn.token;
     const deadline = AbortSignal.timeout(this.timeoutMs);
     const combined = AbortSignal.any([turn.controller.signal, deadline, ...(signal ? [signal] : [])]);
     try {
       if (needsStart) {
         const prompt = buildPrompt(body, token, turn.tools, { connectorName: this.connectorName });
-        const started = await this.notion.start(prompt, { model: this.model, signal: combined,
-          ...(this.reasoningEffort ? { reasoningEffort: this.reasoningEffort } : {}),
+        // One Notion model per Codex turn: the request's resolved model wins, the profile default is the fallback.
+        const effort = reasoningEffort || this.reasoningEffort;
+        const started = await this.notion.start(prompt, { model: notionModel || this.model, signal: combined,
+          ...(effort ? { reasoningEffort: effort } : {}),
           ...(resumeConversationId ? { conversationId: resumeConversationId } : {}) });
         combined.throwIfAborted();
         if (!started?.jobId) throw new Error('Notion chat did not return a background job');

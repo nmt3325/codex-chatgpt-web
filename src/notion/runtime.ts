@@ -5,15 +5,17 @@ import { join } from "node:path";
 import { createDirectBackend } from "./backend";
 import { startServers, type RuntimeServers } from "./core/runtime-server.mjs";
 import { cleanupOwnedConnection, registerOwnedConnection, validateCallbackUrl } from "./connector";
+import { applyModelOverrides, modelRegistry } from "./models";
 import { loadCredentials, loadProfile, privateDirectory, redact } from "./profile";
 import { startQuickTunnel, type OwnedTunnel } from "./tunnel";
 
-export interface RuntimeOptions { home: string; noTools?: boolean; tunnel?: boolean; publicUrl?: string; cloudflared?: string; allowAutomaticTools?: boolean; signal?: AbortSignal }
+export interface RuntimeOptions { home: string; noTools?: boolean; tunnel?: boolean; publicUrl?: string; cloudflared?: string; allowAutomaticTools?: boolean; model?: string; reasoningEffort?: string; signal?: AbortSignal }
 export async function startNotionRuntime(options: RuntimeOptions) {
   const checkStartup = () => { if (options.signal?.aborted) throw new Error("Standalone startup cancelled; owned resources will be cleaned up"); };
   checkStartup();
   const home = options.home; privateDirectory(home);
-  const profile = loadProfile(home), credentials = loadCredentials(home);
+  // A model override applies to this runtime only; the stored profile file is never rewritten.
+  const profile = applyModelOverrides(loadProfile(home), options.model, options.reasoningEffort), credentials = loadCredentials(home);
   const tools = !options.noTools;
   if (tools && !options.tunnel && !options.publicUrl) throw new Error("Native tools need --tunnel or --public-url; use --no-tools for text-only operation");
   if (options.tunnel && options.publicUrl) throw new Error("Choose --tunnel or --public-url, not both");
@@ -45,7 +47,7 @@ export async function startNotionRuntime(options: RuntimeOptions) {
     const account = await client.account();
     checkStartup();
     if (account.spaceId !== profile.workspaceId) throw new Error("Notion authentication did not resolve the explicitly pinned workspace");
-    servers = startServers({ config: { apiHost: "127.0.0.1", apiPort: profile.port, mcpHost: "127.0.0.1", mcpPort: profile.callbackPort, apiKey: profile.apiKey, mcpToken: profile.callbackToken, notionModel: profile.model, connectorName: profile.connectorName, timeoutMs: profile.timeoutMs, toolsEnabled: tools, startupFence: true }, notion: backend });
+    servers = startServers({ config: { apiHost: "127.0.0.1", apiPort: profile.port, mcpHost: "127.0.0.1", mcpPort: profile.callbackPort, apiKey: profile.apiKey, mcpToken: profile.callbackToken, notionModel: profile.model, ...(profile.reasoningEffort ? { reasoningEffort: profile.reasoningEffort } : {}), models: modelRegistry(profile), connectorName: profile.connectorName, timeoutMs: profile.timeoutMs, toolsEnabled: tools, startupFence: true }, notion: backend });
     await servers.ready; checkStartup();
     const port = (servers.codex.address() as { port: number }).port;
     const callbackPort = (servers.mcp.address() as { port: number }).port;

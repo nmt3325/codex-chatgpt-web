@@ -55,6 +55,29 @@ bun run notion run --no-tools -- exec --sandbox read-only "ツールを使わず
 
 このモードではNotionを読み取り専用で実行し、コネクタを作成しません。通常のResponses APIは `127.0.0.1:17842/v1`、ネイティブツールのコールバックは `127.0.0.1:17843/mcp` です。公開する場合は認証付きコールバック側だけにしてください。
 
+## モデル選択
+
+モデルはリクエストごとにCodex側から指定します。`notion models` で使えるスラッグ一覧を表示し、Codex TUIの `/model` で再起動せずに切り替えられます。
+
+```sh
+# スラッグ、Notion側のモデル、指定できるreasoningレベルを一覧表示
+bun run notion models
+./dist/codex-notion-web models --home /path/to/profile
+
+# 既定モデルをsetup時に変更
+bun run notion setup --cookie-file /private/path/notion-cookies.txt --workspace YOUR-WORKSPACE-UUID \
+  --model gpt-5.4 --reasoning-effort high
+
+# その実行だけ上書き（設定ファイルは書き換えません）
+bun run notion run --tunnel --model opus-4.7-high -- exec --sandbox read-only "タスク"
+```
+
+- 先頭の `notion-ai` は「このプロファイルの既定モデル」を指し、Codex起動時はこれが選ばれます。
+- 残りのスラッグは組み込みモデル一覧のうち選択可能なものに1対1で対応するため、アカウントで実際に使えるモデルがそのまま並びます。
+- `--model` と `/model` は、スラッグ・Notionのモデルid（`oatmeal-cookie` など）・内蔵エイリアス（`gpt-5.4`、`sonnet-4.6`、`thinking` など）のどれでも受け付けます。`NOTION_MODEL_ALIASES` にJSONを渡せば独自の別名も追加できます。
+- reasoningレベルはモデルごとに判定し、Codexが扱える `minimal` / `low` / `medium` / `high` の4段階だけを提示します。対応していない値は最も近い段階に丸め、reasoning設定を持たないモデルでは無視します。
+- 未知のスラッグは勝手に別モデルへ落とさず、HTTP 400 と `notion models` の案内で拒否します。
+
 ## 一つの実行ファイルにビルド
 
 ```sh

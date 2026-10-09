@@ -61,7 +61,7 @@ try {
   await servers.ready; callbackPort = (servers.mcp.address() as { port: number }).port;
   const port = (servers.codex.address() as { port: number }).port, codexHome = join(directory, "codex-home"), final = join(directory, "answer.txt"); await mkdir(codexHome);
   const sessionId = randomBytes(16).toString("hex");
-  const args = codexArguments(writeModelCatalog(home), port, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never", "--json", "-c", "features.shell_snapshot=false", "-C", directory, "-o", final, "Run only the deterministic backend-provided isolated smoke task."]);
+  const args = codexArguments(writeModelCatalog(home, profile), port, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never", "--json", "-c", "features.shell_snapshot=false", "-C", directory, "-o", final, "Run only the deterministic backend-provided isolated smoke task."]);
   child = spawn(process.env.CODEX_BIN || "codex", args, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CODEX_HOME: codexHome, CODEX_NOTION_API_KEY: profile.apiKey, CODEX_NOTION_SESSION_ID: sessionId } });
   let stdout = "", stderr = ""; child.stdout!.on("data", data => { stdout += data; }); child.stderr!.on("data", data => { stderr += data; });
   const timer = setTimeout(() => child?.kill("SIGTERM"), 35000);

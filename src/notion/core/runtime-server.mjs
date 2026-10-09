@@ -25,6 +25,20 @@ export function startServers({ config, notion = null, bridge = null } = {}) {
   let acceptingRequests = config.startupFence !== true;
   const markReady = () => { if (!shuttingDown) acceptingRequests = true; };
   const beginShutdown = () => { shuttingDown = true; runtime.close?.(); };
+  const advertisedModels = () => config.models?.list?.() || [{ slug: 'notion-ai' }];
+  // Codex picks a model per request; only slugs this profile advertises may reach Notion.
+  const selectModel = body => {
+    if (!body || typeof body.model !== 'string' || !body.model.trim()) throw requestError('A model slug is required on this isolated endpoint');
+    const requested = body.reasoning && typeof body.reasoning.effort === 'string' ? body.reasoning.effort : undefined;
+    if (!config.models) {
+      if (body.model !== 'notion-ai') throw requestError('Only the notion-ai model is served on this isolated endpoint');
+      return { model: config.notionModel, ...(config.reasoningEffort ? { reasoningEffort: config.reasoningEffort } : {}) };
+    }
+    let resolved;
+    try { resolved = config.models.resolve(body.model, requested); }
+    catch (error) { throw requestError(error.message); }
+    return { model: resolved.modelId, ...(resolved.reasoningEffort ? { reasoningEffort: resolved.reasoningEffort } : {}) };
+  };
   const codex = http.createServer(async (req, res) => {
     try {
       if (shuttingDown) return fail(res, 503, 'Runtime is shutting down');
@@ -32,11 +46,12 @@ export function startServers({ config, notion = null, bridge = null } = {}) {
       if (path === '/healthz') return json(res, 200, { status: 'ok', backend: 'notion-direct', external_notion_mcp: false, native_tools: config.toolsEnabled !== false });
       if (!authenticate(req, config.apiKey)) return fail(res, 401, 'Unauthorized');
       if (req.method === 'GET' && ['/v1/models', '/models'].includes(path)) return json(res, 200,
-        { object: 'list', data: [{ id: 'notion-ai', object: 'model', created: 0, owned_by: 'notion-bridge' }] });
+        { object: 'list', data: advertisedModels().map(model => ({ id: model.slug, object: 'model', created: 0, owned_by: 'notion-bridge',
+          ...(model.displayName ? { display_name: model.displayName } : {}) })) });
       if (req.method !== 'POST' || !['/v1/responses', '/responses'].includes(path)) return fail(res, 404, 'Not found');
       if (!acceptingRequests) return fail(res, 503, 'Runtime is still preparing its owned callback');
       const body = await readJson(req, 10_000_000);
-      if (!body || body.model !== 'notion-ai') throw requestError('Only the notion-ai model is served on this isolated endpoint');
+      const selection = selectModel(body);
       if (config.toolsEnabled === false) { body.tools = []; body.tool_choice = 'none'; }
       extractInputs(body);
       const sessionId = req.headers.session_id || req.headers['x-codex-session-id'];
@@ -50,9 +65,9 @@ export function startServers({ config, notion = null, bridge = null } = {}) {
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
           res.write(': waiting for Notion AI\n\n');
           heartbeat = setInterval(() => { if (!res.destroyed && !res.writableEnded) res.write(': heartbeat\n\n'); }, 10_000);
-          const response = await runtime.run(body, { signal: controller.signal, sessionId });
+          const response = await runtime.run(body, { signal: controller.signal, sessionId, ...selection });
           if (!res.destroyed) streamResponse(res, response);
-        } else json(res, 200, await runtime.run(body, { signal: controller.signal, sessionId }));
+        } else json(res, 200, await runtime.run(body, { signal: controller.signal, sessionId, ...selection }));
       } finally { clearInterval(heartbeat); res.removeListener('close', abort); }
     } catch (error) {
       const message = (backend?.redact?.(error) || String(error.message || 'Bridge error')).replace(/turn_[a-f0-9]+/g, '[turn]').replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '[conversation]');

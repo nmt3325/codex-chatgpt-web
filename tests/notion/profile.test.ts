@@ -77,7 +77,7 @@ test("conversation text is not silently truncated to the old 90k prompt slice", 
 });
 test("Codex catalog advertises native freeform patch without pretending to support images", () => {
   const home = mkdtempSync(join(tmpdir(), "notion-catalog-test-"));
-  try { const catalog = writeModelCatalog(home); const model = JSON.parse(readFileSync(catalog, "utf8")).models[0]; expect(model.apply_patch_tool_type).toBe("freeform"); expect(model.input_modalities).toEqual(["text"]); const toml = codexConfig(newProfile(workspace), catalog); expect(toml).toContain('env_key = "CODEX_NOTION_API_KEY"'); expect(toml).not.toContain("notion-ai-mcp"); }
+  try { const catalog = writeModelCatalog(home, newProfile(workspace)); const model = JSON.parse(readFileSync(catalog, "utf8")).models[0]; expect(model.apply_patch_tool_type).toBe("freeform"); expect(model.input_modalities).toEqual(["text"]); const toml = codexConfig(newProfile(workspace), catalog); expect(toml).toContain('env_key = "CODEX_NOTION_API_KEY"'); expect(toml).not.toContain("notion-ai-mcp"); }
   finally { rmSync(home, { recursive: true, force: true }); }
 });
 

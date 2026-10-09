@@ -3,6 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, 
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { NotionConfig } from "./client/config";
+import { REASONING_EFFORTS, type ReasoningEffort } from "./client/models";
 import { DEFAULT_WEB_CONFIRMATION } from "./client/web-confirmation";
 
 export interface NotionProfile {
@@ -12,6 +13,7 @@ export interface NotionProfile {
   callbackPort: number;
   connectorName: string;
   model: string;
+  reasoningEffort?: string;
   timeoutMs: number;
   apiKey: string;
   callbackToken: string;
@@ -51,6 +53,7 @@ export function validateProfile(value: NotionProfile): NotionProfile {
   if (typeof value.apiKey !== "string" || value.apiKey.length < 32 || typeof value.callbackToken !== "string" || value.callbackToken.length < 32 || value.apiKey === value.callbackToken) throw new Error("Independent strong Responses and callback keys are required");
   if (typeof value.connectorName !== "string" || !value.connectorName.trim() || value.connectorName.length > 100 || /[\r\n]/.test(value.connectorName)) throw new Error("Invalid connector name");
   if (typeof value.model !== "string" || !value.model.trim() || value.model.length > 100) throw new Error("Invalid Notion model");
+  if (value.reasoningEffort !== undefined && !REASONING_EFFORTS.includes(value.reasoningEffort as ReasoningEffort)) throw new Error("Invalid Notion reasoning effort");
   return value;
 }
 export function newProfile(workspaceId: string): NotionProfile {
