@@ -58,3 +58,7 @@ The compiled app does not require Bun, Node, a sibling `notion-ai-mcp` checkout,
 - Live auth/model availability and AI credits are still required. This uses unofficial Notion web interfaces and may break when they change.
 - If a process is killed or remote cleanup fails, retain the private owned record and use `notion cleanup --stale-lock`. Cleanup never adopts or changes another connector.
 - Windows/macOS binaries and full upstream desktop packaging were not validated for the new Notion command.
+
+## Hosted native CI environment
+
+The first hosted Ubuntu-latest smoke failed with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, before the fixture command could execute. The dedicated workflow selects a compatible Ubuntu 22.04 hosted VM instead. It does **not** disable Codex sandbox/approvals, grant automatic Notion access, enable native network access, or modify kernel/AppArmor settings to bypass that restriction. The smoke still requires all three actual native results and the real patch file. Failure diagnostics contain only the mocked isolated fixture and are redacted.
