@@ -32,7 +32,7 @@ async function executeNative(token: string) {
   for (const command of ["printf '%s\\n' '" + marker + "'", "pwd"]) {
     const args = /exec_command$/.test(shell.wire_name) ? { cmd: command, workdir: directory } : { command, workdir: directory };
     const result = await rpc("tools/call", { name: "codex_tool_call", arguments: { turn_token: token, wire_name: shell.wire_name, arguments: args } });
-    const text = JSON.stringify(result); returned.push(text); nativeResults++; assert.ok(text.includes(command === "pwd" ? directory : marker), "The same pending MCP request must receive actual native output");
+    const text = JSON.stringify(result); returned.push(text); nativeResults++; assert.ok(text.includes(command === "pwd" ? directory : marker), "The same pending MCP request must receive actual native output; actual result: " + text);
   }
   const patch = tools.find(tool => /(?:^|\.)apply_patch$/.test(tool.wire_name)); assert.ok(patch, "Real Codex must advertise apply_patch"); assert.equal(patch.kind, "custom");
   const result = await rpc("tools/call", { name: "codex_tool_call", arguments: { turn_token: token, wire_name: patch.wire_name, input: "*** Begin Patch\n*** Add File: standalone-result.txt\n+STANDALONE_PATCH_OK\n*** End Patch\n" } });
@@ -69,6 +69,10 @@ try {
   const answer = await readFile(final, "utf8").catch(() => "");
   const report = { kind: "real-codex-real-embedded-client-mock-notion-api", external_notion_mcp: false, exit_code: exit, direct_inference_requests: inferenceRequests, native_results: nativeResults, same_pending_mcp_result: returned.length === 3, freeform_patch_verified: patchVerified, stable_session_header: sessions.size === 1 && sessions.has(sessionId), final: answer.trim(), endpoints: [...new Set(endpoints)] };
   console.log(JSON.stringify(report, null, 2));
-  if (exit !== 0) console.error(backend.redact(stderr.slice(-5000)));
+  if (exit !== 0) {
+    console.error("Mock fixture native output:", backend.redact(returned.join("\n").slice(-8000)));
+    console.error("Codex fixture events:", backend.redact(stdout.slice(-8000)));
+    console.error(backend.redact(stderr.slice(-5000)));
+  }
   assert.equal(exit, 0); assert.equal(inferenceRequests, 1, "Native results must resume the same inference, not create a new Notion user message"); assert.equal(nativeResults, 3); assert.ok(patchVerified); assert.deepEqual([...sessions], [sessionId]); assert.equal(answer.trim(), "STANDALONE_NATIVE_OK");
 } finally { if (child?.exitCode === null) child.kill("SIGTERM"); await servers.close(); backend.close(); await rm(directory, { recursive: true, force: true }); }
