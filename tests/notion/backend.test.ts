@@ -3,12 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DirectNotionBackend, createDirectBackend, type DirectClient } from "../../src/notion/backend";
+import type { ChatJob, ChatJobStatus, ThreadSignals } from "../../src/notion/client/types";
 import { newProfile } from "../../src/notion/profile";
 const workspace = "22222222-2222-4222-8222-222222222222", user = "11111111-1111-4111-8111-111111111111", conversation = "66666666-6666-4666-8666-666666666666";
+function storedJob(jobId: string, status: ChatJobStatus, startedAt = Date.now()): ChatJob {
+  return { jobId, conversationId: conversation, status, model: "fixture", promptPreview: "prompt", turn: 1, transport: "inference_transcript", startedAt };
+}
 function fakeClient(overrides: Partial<DirectClient> = {}): DirectClient {
   return {
     async startChat(options) { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "fixture", startedAt: Date.now(), hint: "" }; },
     async chatResult() { return { status: "completed", source: "job", conversationId: conversation, text: "answer" }; },
+    listChatJobs() { return [storedJob("fixture-job", "completed"), storedJob("j", "completed")]; },
     async threadSignals() { return { threadId: conversation, updatedTime: null, serverNow: Date.now(), messageCount: 0, lastTurnOutcome: null, credits: null, currentInferenceId: "", leaseExpiration: null }; },
     async finalStepShape() { return null; }, ...overrides,
   };
@@ -45,6 +50,108 @@ test("persisted MCP confirmation is diagnosed, not silently approved or mislabel
   }), true);
   try { await backend.start("hello"); const result = await backend.poll("fixture-job"); expect(result.error).toContain("Approval is not bypassed"); expect(result.error).not.toContain("maybe credits"); } finally { backend.close(); }
 });
+
+// Notion writes each step as it is produced, so stored assistant text is not an answer until the
+// turn itself closes. Collecting that interim text ended the Codex turn - and revoked its tool
+// capability - while Notion was still generating and about to call back for a native tool.
+function generatingSignals(startedAt: number): ThreadSignals {
+  return { threadId: conversation, updatedTime: startedAt + 2000, serverNow: startedAt + 3000, messageCount: 6, credits: null,
+    currentInferenceId: "live-inference", leaseExpiration: startedAt + 60000,
+    lastTurnOutcome: { status: "completed", completedTime: startedAt - 60000, stepCount: 4, inferenceId: "previous", finalStepId: "previous-step" } };
+}
+function closedSignals(startedAt: number): ThreadSignals {
+  return { threadId: conversation, updatedTime: startedAt + 25000, serverNow: startedAt + 26000, messageCount: 12, credits: null,
+    currentInferenceId: "", leaseExpiration: null,
+    lastTurnOutcome: { status: "completed", completedTime: startedAt + 25000, stepCount: 9, inferenceId: "this-turn", finalStepId: "final-step" } };
+}
+function answerStep(startedAt: number) { return { stepId: "final-step", type: "agent-inference", state: "", hasAnswerText: true, hasToolUse: false, finishedAt: startedAt + 25000 }; }
+
+test("interim step text is never collected while Notion is still generating the turn", async () => {
+  const startedAt = Date.now(); let lookups = 0;
+  const backend = new DirectNotionBackend(fakeClient({
+    async startChat() { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "m", startedAt, hint: "" }; },
+    listChatJobs() { return [storedJob("fixture-job", "running", startedAt)]; },
+    async chatResult() { lookups++; return { status: "completed", source: "thread", conversationId: conversation, text: "I'll get the tool inventory first." }; },
+    async threadSignals() { return generatingSignals(startedAt); },
+  }), true);
+  try {
+    await backend.start("explain this folder");
+    const result = await backend.poll("fixture-job");
+    expect(result.status).toBe("running");
+    expect(result.text).toBeUndefined();
+    expect(lookups).toBe(0);
+  } finally { backend.close(); }
+});
+
+test("the answer is collected once the thread records this turn's completion flag", async () => {
+  const startedAt = Date.now(); let generating = true;
+  const backend = new DirectNotionBackend(fakeClient({
+    async startChat() { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "m", startedAt, hint: "" }; },
+    listChatJobs() { return [storedJob("fixture-job", "running", startedAt)]; },
+    async chatResult() { return { status: "completed", source: "thread", conversationId: conversation, text: "the real final answer" }; },
+    async threadSignals() { return generating ? generatingSignals(startedAt) : closedSignals(startedAt); },
+    async finalStepShape() { return answerStep(startedAt); },
+  }), true);
+  try {
+    await backend.start("explain this folder");
+    expect((await backend.poll("fixture-job")).status).toBe("running");
+    generating = false;
+    await Bun.sleep(800);
+    const done = await backend.poll("fixture-job");
+    expect(done.status).toBe("completed");
+    expect(done.text).toBe("the real final answer");
+  } finally { backend.close(); }
+});
+
+test("a completion flag left over from an earlier turn does not end this turn", async () => {
+  const startedAt = Date.now(); let lookups = 0;
+  const backend = new DirectNotionBackend(fakeClient({
+    async startChat() { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "m", startedAt, hint: "" }; },
+    listChatJobs() { return [storedJob("fixture-job", "running", startedAt)]; },
+    async chatResult() { lookups++; return { status: "completed", source: "thread", conversationId: conversation, text: "answer of the previous turn" }; },
+    // No live lease yet, but the only recorded outcome belongs to the turn before this one.
+    async threadSignals() { return { ...generatingSignals(startedAt), currentInferenceId: "", leaseExpiration: null }; },
+    async finalStepShape() { return answerStep(startedAt); },
+  }), true);
+  try {
+    await backend.start("how is the progress");
+    expect((await backend.poll("fixture-job")).status).toBe("running");
+    expect(lookups).toBe(0);
+  } finally { backend.close(); }
+});
+
+test("a turn closed on a step that is still streaming is not treated as an answer", async () => {
+  const startedAt = Date.now(); let lookups = 0;
+  const backend = new DirectNotionBackend(fakeClient({
+    async startChat() { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "m", startedAt, hint: "" }; },
+    listChatJobs() { return [storedJob("fixture-job", "running", startedAt)]; },
+    async chatResult() { lookups++; return { status: "completed", source: "thread", conversationId: conversation, text: "half written" }; },
+    async threadSignals() { return closedSignals(startedAt); },
+    async finalStepShape() { return { stepId: "final-step", type: "agent-inference", state: "streaming", hasAnswerText: true, hasToolUse: true, finishedAt: null }; },
+  }), true);
+  try {
+    await backend.start("explain this folder");
+    expect((await backend.poll("fixture-job")).status).toBe("running");
+    expect(lookups).toBe(0);
+  } finally { backend.close(); }
+});
+
+test("a stream that already finished is collected without re-reading the thread", async () => {
+  const startedAt = Date.now(); let signalReads = 0;
+  const backend = new DirectNotionBackend(fakeClient({
+    async startChat() { return { status: "running", jobId: "fixture-job", conversationId: conversation, model: "m", startedAt, hint: "" }; },
+    listChatJobs() { return [storedJob("fixture-job", "completed", startedAt)]; },
+    async chatResult() { return { status: "completed", source: "job", conversationId: conversation, text: "streamed answer" }; },
+    async threadSignals() { signalReads++; return closedSignals(startedAt); },
+  }), true);
+  try {
+    await backend.start("hello");
+    const result = await backend.poll("fixture-job");
+    expect(result.text).toBe("streamed answer");
+    expect(signalReads).toBe(0);
+  } finally { backend.close(); }
+});
+
 function authenticationMap(space = workspace) { return { recordMap: { notion_user: { [user]: { value: { id: user, name: "Fixture User", email: "fixture@example.test" } } }, user_root: { [user]: { value: { space_view_pointers: [{ id: "33333333-3333-4333-8333-333333333333", spaceId: space }] } } }, space: { [space]: { value: { id: space, name: "Fixture Workspace", plan_type: "enterprise" } } } } }; }
 test("real embedded SDK refuses inaccessible pinned workspace before inference", async () => {
   const home = mkdtempSync(join(tmpdir(), "notion-pin-test-")); const endpoints: string[] = [];
@@ -60,6 +167,7 @@ test("real embedded SDK talks directly to Notion API and completes without any e
     if (endpoint === "loadUserContent") return Response.json(authenticationMap());
     if (endpoint === "runInferenceTranscript") return new Response(JSON.stringify({ type: "agent-inference", value: [{ type: "text", content: "IN_PROCESS_OK" }], finishedAt: Date.now(), inputTokens: 2, outputTokens: 1 }) + "\n", { headers: { "content-type": "application/x-ndjson" } });
     if (endpoint === "getInferenceTranscriptsForUser") return Response.json({ recordMap: {}, transcripts: [], hasMore: false });
+    if (endpoint === "syncRecordValuesMain") return Response.json({ recordMap: {} });
     throw new Error("Unexpected direct SDK endpoint: " + endpoint);
   }) as typeof fetch;
   const { backend } = createDirectBackend(newProfile(workspace), { token_v2: "fixture" }, home, false, fake);
