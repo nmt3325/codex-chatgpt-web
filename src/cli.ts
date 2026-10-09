@@ -39,6 +39,7 @@ Usage:
   codex-chatgpt-web setup --browser-only [options]
   codex-chatgpt-web setup --full --tunnel-id ID --runtime-key-file PATH [options]
   codex-chatgpt-web login
+  codex-chatgpt-web notion <setup|doctor|serve|run|config|cleanup> [options]
   codex-chatgpt-web doctor [--json]
   codex-chatgpt-web route <status|connect|disconnect>
   codex-chatgpt-web subagents <status|compatibility-v1|native>
@@ -563,6 +564,11 @@ async function uninstallCommand(args: string[]): Promise<void> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  if (args[0] === "notion") {
+    const { runNotionCommand } = await import("./notion/cli");
+    await runNotionCommand(args.slice(1));
+    return;
+  }
   const home = takeOption(args, "--home");
   if (home) process.env.CODEX_CHATGPT_WEB_HOME = home;
   if (takeFlag(args, "--help") || takeFlag(args, "-h")) {

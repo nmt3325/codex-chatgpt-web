@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/nmt3325/notion-ai-mcp",
+  "version": "0.8.0",
+  "files": {
+    "agent-transcript.ts": "81e0ae572c162996294d8fa9c160c7d42f6afcaa85280c8a63e31a0e55f330d3",
+    "attachments.ts": "fe462cb5542555a85d3742faf84953fb4988a2ee305e0de3a9f2518263cdd04b",
+    "chat-jobs.ts": "a2951c1c32985d9f1d6eae23f59363568d5fe2ac7be33b5856b334037577b6e6",
+    "config.ts": "de2cead31ede34565825f884f8f8e0d117946bbdc61841332a572f71fdb5dbfb",
+    "keep-awake.ts": "d3fdcfc5701b2aab0d4c4b46a910afa0832e475462351108788d9723ebdf1b73",
+    "mcp-connections.ts": "858ba59676e865b47487f67ca691392cf572fc1baf4900f4b401afc5c5d0aa36",
+    "models.ts": "5db032cb161eaa4d3e5ca4d0e7b4979932debdf6b25846852490e85f02445ff6",
+    "native-continuation.ts": "05bf7341857d4c072c07f2798cc308f3342b29075e34b9cc20b81963385c071d",
+    "notion-client.ts": "89853055fb946310ec62a0cef675a42dcdcebd0c9185c0aaca0165c8e81fccb4",
+    "types.ts": "d7af990870b3006095ccdbf41cb9bd7d37039d2ff5e00eeac31d6d780ac2186a",
+    "web-confirmation.ts": "021bcaac11083fcae64184cb54f7f202cfe0bae1aa1d9907db5ed8b335898eaa",
+    "workspace-manager.ts": "af53eb681f51d515c559abe75d8475a935b76ae2cbfefc54a981693ae05bb928"
+  }
+}

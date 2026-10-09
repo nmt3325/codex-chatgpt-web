@@ -1,3 +1,5 @@
+> **Standalone Notion AI fork:** This fork adds an embedded Notion client and an isolated `bun run notion` command. No separate `notion-ai-mcp` service is required. [Setup and safety guide](docs/notion-standalone.md). The upstream ChatGPT instructions and release installers below are retained for their original features; they do not contain this fork’s new Notion provider.
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="切换到网页版模型，继续使用 Codex。你的 ChatGPT 订阅。你的工作流。充分发挥模型能力。">
 </p>

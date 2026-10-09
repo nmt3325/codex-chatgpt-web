@@ -1,0 +1,32 @@
+name: Notion standalone
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct-client-and-native-roundtrip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test:notion
+      - name: Install the actual pinned Codex CLI
+        run: npm install --global @openai/codex@0.161.0
+      - name: Real embedded client and real native tools, mock remote API only
+        run: bun run smoke:notion
+      - name: Build the app without an external Notion MCP service
+        run: bun run build:notion
+      - run: ./dist/codex-notion-web --help

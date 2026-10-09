@@ -5,11 +5,11 @@
   "description": "A focused local Responses bridge that runs Codex tasks through a user-authenticated ChatGPT web session.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/miuuyy/codex-chatgpt-web.git"
+    "url": "git+https://github.com/nmt3325/codex-chatgpt-web.git"
   },
-  "homepage": "https://github.com/miuuyy/codex-chatgpt-web#readme",
+  "homepage": "https://github.com/nmt3325/codex-chatgpt-web#readme",
   "bugs": {
-    "url": "https://github.com/miuuyy/codex-chatgpt-web/issues"
+    "url": "https://github.com/nmt3325/codex-chatgpt-web/issues"
   },
   "packageManager": "bun@1.4.0",
   "type": "module",
@@ -51,7 +51,11 @@
     "launcher:typecheck": "bun run --cwd launcher typecheck",
     "launcher:build": "bun run --cwd launcher build",
     "launcher:test": "bun run --cwd launcher test",
-    "verify": "bun run scripts/verify.ts"
+    "verify": "bun run scripts/verify.ts",
+    "notion": "bun run src/notion/main.ts",
+    "test:notion": "bun test tests/notion",
+    "build:notion": "bun build src/notion/main.ts --compile --outfile dist/codex-notion-web",
+    "smoke:notion": "bun run scripts/smoke-notion.ts"
   },
   "dependencies": {
     "@mixmark-io/domino": "2.2.0",

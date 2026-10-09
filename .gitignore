@@ -18,3 +18,10 @@ launcher/artifacts/
 output/
 notes.md
 /.agents/skills/github-pairing/
+
+# Isolated Notion development credentials and evidence
+.local/
+.artifacts/
+cookie.txt
+cookies.txt
+notion-account.json

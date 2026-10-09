@@ -1,3 +1,5 @@
+> **Notion AI 単独起動版fork:** Notionクライアントを内包した `bun run notion` コマンドを追加しています。別の `notion-ai-mcp` サーバーは不要です。[設定・起動・安全性ガイド](docs/notion-standalone.md)。以下の元プロジェクトの説明・配布インストーラーはChatGPT機能用で、このforkの新しいNotion対応が含まれているという意味ではありません。
+
 <p align="center">
   <img src="assets/readme/hero.svg" width="960" alt="Web モデルに切り替えても、Codex はそのまま。ChatGPT のプラン。いつものワークフロー。モデルの力を最大限に。">
 </p>

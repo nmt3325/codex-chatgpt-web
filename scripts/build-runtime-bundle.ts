@@ -141,6 +141,8 @@ if (notices.exitCode !== 0) {
 }
 copyFileSync(join(root, "LICENSE"), join(output, "LICENSE"));
 cpSync(join(root, "LICENSES"), join(output, "LICENSES"), { recursive: true });
+copyFileSync(join(root, "src", "notion", "NOTICE.md"), join(output, "NOTION_SOURCE_NOTICE.md"));
+copyFileSync(join(root, "src", "notion", "client-sources.json"), join(output, "NOTION_CLIENT_SOURCES.json"));
 
 interface RuntimeManifestFile {
   path: string;
